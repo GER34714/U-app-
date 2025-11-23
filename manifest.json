@@ -1,0 +1,9 @@
+{
+  "name": "UñApp",
+  "short_name": "UñApp",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#111111",
+  "theme_color": "#FF00B3",
+  "icons": []
+}
