@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UñApp - Vista de Uñas</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#FF00B3">
+
+<style>
+    body {
+        background:#111;
+        color:#fff;
+        font-family: Arial, sans-serif;
+        text-align:center;
+        margin:0; padding:20px;
+    }
+
+    h1 { font-size:26px; margin-bottom:10px; }
+    button {
+        width:90%;
+        padding:15px;
+        margin:10px 0;
+        background:#FF00B3;
+        border:none;
+        border-radius:10px;
+        font-size:18px;
+        color:#fff;
+        font-weight:bold;
+    }
+
+    #cameraPreview, #finalPreview {
+        width:100%;
+        margin-top:20px;
+        border-radius:12px;
+    }
+</style>
+</head>
+<body>
+
+<h1>💅 UñApp</h1>
+<p>Elegí un esmalte y mirá cómo queda en tu uña</p>
+
+<button onclick="pickColorPhoto()">📸 Sacar foto del esmalte</button>
+<button onclick="startCamera()">📷 Ver uña en vivo</button>
+
+<input type="file" accept="image/*" id="colorInput" style="display:none">
+
+<video id="cameraPreview" autoplay playsinline style="display:none"></video>
+<canvas id="finalPreview" style="display:none"></canvas>
+
+<script>
+// Elegir foto de esmalte
+let selectedColor = "#ff00ff";
+
+function pickColorPhoto() {
+    document.getElementById("colorInput").click();
+}
+
+document.getElementById("colorInput").addEventListener("change", async function(e){
+    let file = e.target.files[0];
+    let img = new Image();
+    img.src = URL.createObjectURL(file);
+
+    img.onload = () => {
+        selectedColor = getDominantColor(img);
+        alert("Color detectado ✔️");
+    }
+});
+
+// Detectar color dominante
+function getDominantColor(img){
+    const canvas = document.createElement("canvas");
+    canvas.width = 1; canvas.height = 1;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, 1, 1);
+    const pixel = ctx.getImageData(0,0,1,1).data;
+    return `rgb(${pixel[0]},${pixel[1]},${pixel[2]})`;
+}
+
+// Cámara en vivo
+function startCamera(){
+    const video = document.getElementById("cameraPreview");
+    video.style.display = "block";
+
+    navigator.mediaDevices.getUserMedia({ video:true })
+    .then(stream=>{
+        video.srcObject = stream;
+
+        setInterval(()=> applyColorFilter(video), 100);
+    });
+}
+
+// Pintar uña (filtro completo por ahora)
+function applyColorFilter(video){
+    const canvas = document.getElementById("finalPreview");
+    const ctx = canvas.getContext("2d");
+
+    canvas.style.display = "block";
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = selectedColor;
+    ctx.globalAlpha = 0.25;
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.globalAlpha = 1.0;
+}
+</script>
+
+</body>
+</html>
