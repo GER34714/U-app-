@@ -1,164 +1,116 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
 <meta charset="UTF-8">
+<title>UñApp Demo</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>UñApp PRO Realista</title>
 
-<!-- MediaPipe -->
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
 <style>
-body {
-    background:#111;
-    color:white;
-    text-align:center;
-    font-family:Arial;
-    padding:15px;
+body{
+  background:#111;
+  color:#fff;
+  text-align:center;
+  font-family:Arial;
 }
-button {
-    width:90%;
-    padding:15px;
-    background:#FF00B3;
-    border:none;
-    border-radius:10px;
-    font-size:18px;
-    color:white;
-    margin-top:10px;
-    font-weight:bold;
+video,canvas{
+  width:100%;
+  border-radius:12px;
+  margin-top:10px;
 }
-video, canvas {
-    width:100%;
-    border-radius:12px;
-    margin-top:15px;
+button{
+  width:90%;
+  padding:15px;
+  background:#ff00b3;
+  border:none;
+  color:#fff;
+  font-size:18px;
+  border-radius:10px;
+  margin-top:10px;
 }
 </style>
 </head>
+
 <body>
 
-<h1>💅 UñApp PRO Realista</h1>
-<p>Color real del esmalte aplicado SOLO en las uñas.</p>
+<h2>💅 UñApp Demo — Funciona YA</h2>
+<p>Elegí el esmalte y se verá pintado en tus uñas</p>
 
-<button onclick="pickColor()">📸 Sacar foto del esmalte</button>
+<button onclick="pickColor()">📸 Elegir foto del esmalte</button>
 <input id="colorInput" type="file" accept="image/*" style="display:none">
 
 <video id="video" autoplay playsinline></video>
 <canvas id="canvas"></canvas>
 
 <script>
-let selectedColor = "rgb(255,0,255)";
+let color = "rgb(255,0,150)";
 
-function pickColor(){
-    document.getElementById("colorInput").click();
-}
+function pickColor(){ document.getElementById("colorInput").click(); }
 
 document.getElementById("colorInput").addEventListener("change", e=>{
-    let file = e.target.files[0];
-    let img = new Image();
-    img.src = URL.createObjectURL(file);
-    img.onload = ()=>{
-        selectedColor = getDominantColor(img);
-        alert("Color detectado ✔️");
-    }
-});
-
-function getDominantColor(img){
+  let file = e.target.files[0];
+  let img = new Image();
+  img.src = URL.createObjectURL(file);
+  img.onload = ()=>{
     let c = document.createElement("canvas");
     c.width=1; c.height=1;
     let ctx = c.getContext("2d");
     ctx.drawImage(img,0,0,1,1);
     let d = ctx.getImageData(0,0,1,1).data;
-    return `rgb(${d[0]},${d[1]},${d[2]})`;
-}
+    color = `rgb(${d[0]},${d[1]},${d[2]})`;
+    alert("Color detectado ✔");
+  }
+});
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-async function startCam(){
-    const stream = await navigator.mediaDevices.getUserMedia({video:true});
-    video.srcObject = stream;
+async function start(){
+  const stream = await navigator.mediaDevices.getUserMedia({ video:true });
+  video.srcObject = stream;
 }
-startCam();
+start();
 
-// HANDS
 const hands = new Hands({
-  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+  locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
 });
-hands.setOptions({
-  maxNumHands: 1,
-  modelComplexity: 1,
-  minDetectionConfidence: 0.6,
-  minTrackingConfidence: 0.6
-});
+hands.setOptions({ maxNumHands:1, minDetectionConfidence:0.6, minTrackingConfidence:0.6 });
 
-// SEGMENTACIÓN (mano completa)
-const segment = new SelfieSegmentation({
-  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`
-});
-segment.setOptions({modelSelection:1});
+hands.onResults(res=>{
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video,0,0,canvas.width,canvas.height);
 
-// Combinar ambos resultados
-hands.onResults(results => draw(results));
-segment.onResults(seg => (window.segMask = seg.segmentationMask));
+  if(!res.multiHandLandmarks[0]) return;
+  let h = res.multiHandLandmarks[0];
 
-const cam = new Camera(video, {
-  onFrame: async () => {
-    await segment.send({image: video});
-    await hands.send({image: video});
-  },
-  width: 1280, height: 720
-});
-cam.start();
+  // Puntas de los cinco dedos
+  let nails = [h[4],h[8],h[12],h[16],h[20]];
 
-function draw(results){
-    if(!window.segMask) return;
+  nails.forEach(n=>{
+    let x = n.x * canvas.width;
+    let y = n.y * canvas.height;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    // Mostrar la cámara
-    ctx.drawImage(video,0,0,canvas.width,canvas.height);
-
-    if(!results.multiHandLandmarks[0]) return;
-
-    const hand = results.multiHandLandmarks[0];
-
-    // Uñas reales: usar 4 puntos por dedo
-    const nailGroups = [
-        [hand[4], hand[3], hand[2], hand[1]],   // pulgar
-        [hand[8], hand[7], hand[6], hand[5]],   // índice
-        [hand[12], hand[11], hand[10], hand[9]], // medio
-        [hand[16], hand[15], hand[14], hand[13]],// anular
-        [hand[20], hand[19], hand[18], hand[17]] // meñique
-    ];
-
-    nailGroups.forEach(poly => paintNailPolygon(poly));
-}
-
-function paintNailPolygon(poly){
     ctx.save();
     ctx.beginPath();
-
-    poly.forEach((p,i)=>{
-        let x = p.x * canvas.width;
-        let y = p.y * canvas.height;
-        if(i===0) ctx.moveTo(x,y);
-        else ctx.lineTo(x,y);
-    });
-    ctx.closePath();
+    ctx.arc(x,y,28,0,Math.PI*2);
     ctx.clip();
 
-    // Aplicar el color real del esmalte con textura natural
-    ctx.globalAlpha = 0.55;
-    ctx.fillStyle = selectedColor;
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-
+    ctx.globalAlpha=0.45;
+    ctx.fillStyle=color;
+    ctx.fillRect(x-30,y-30,60,60);
     ctx.restore();
-    ctx.globalAlpha = 1;
-}
+    ctx.globalAlpha=1;
+  });
+});
+
+const cam = new Camera(video,{
+  onFrame:async()=>{ await hands.send({image:video}); }
+});
+cam.start();
 </script>
 
 </body>
