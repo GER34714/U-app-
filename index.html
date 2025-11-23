@@ -3,110 +3,157 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>UñApp - Vista de Uñas</title>
+<title>UñApp PRO</title>
 
-<!-- PWA -->
-<link rel="manifest" href="manifest.json" />
-<meta name="theme-color" content="#FF00B3">
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 
 <style>
-    body {
-        background:#111;
-        color:#fff;
-        font-family: Arial, sans-serif;
-        text-align:center;
-        margin:0; padding:20px;
-    }
-
-    h1 { font-size:26px; margin-bottom:10px; }
-    button {
-        width:90%;
-        padding:15px;
-        margin:10px 0;
-        background:#FF00B3;
-        border:none;
-        border-radius:10px;
-        font-size:18px;
-        color:#fff;
-        font-weight:bold;
-    }
-
-    #cameraPreview, #finalPreview {
-        width:100%;
-        margin-top:20px;
-        border-radius:12px;
-    }
+body {
+    background:#111;
+    color:#fff;
+    font-family: Arial, sans-serif;
+    text-align:center;
+    margin:0;
+    padding:15px;
+}
+h1 {
+    font-size:26px;
+    margin-top:10px;
+}
+button {
+    width:90%;
+    padding:15px;
+    margin:10px 0;
+    background:#FF00B3;
+    border:none;
+    border-radius:10px;
+    font-size:18px;
+    color:#fff;
+    font-weight:bold;
+}
+video, canvas {
+    width:100%;
+    border-radius:12px;
+    margin-top:15px;
+}
 </style>
 </head>
 <body>
 
-<h1>💅 UñApp</h1>
-<p>Elegí un esmalte y mirá cómo queda en tu uña</p>
+<h1>💅 UñApp PRO</h1>
+<p>Poné tu mano y mirá tus uñas pintadas en vivo</p>
 
-<button onclick="pickColorPhoto()">📸 Sacar foto del esmalte</button>
-<button onclick="startCamera()">📷 Ver uña en vivo</button>
+<button onclick="pickColor()">📸 Elegir foto del esmalte</button>
+<input id="colorInput" type="file" accept="image/*" style="display:none">
 
-<input type="file" accept="image/*" id="colorInput" style="display:none">
-
-<video id="cameraPreview" autoplay playsinline style="display:none"></video>
-<canvas id="finalPreview" style="display:none"></canvas>
+<video id="camera" autoplay playsinline></video>
+<canvas id="output"></canvas>
 
 <script>
-// Elegir foto de esmalte
-let selectedColor = "#ff00ff";
+let selectedColor = "rgb(255,0,255)"; // default rosa
 
-function pickColorPhoto() {
+function pickColor(){
     document.getElementById("colorInput").click();
 }
 
-document.getElementById("colorInput").addEventListener("change", async function(e){
+document.getElementById("colorInput").addEventListener("change", e=>{
     let file = e.target.files[0];
     let img = new Image();
     img.src = URL.createObjectURL(file);
-
-    img.onload = () => {
+    img.onload = ()=>{
         selectedColor = getDominantColor(img);
-        alert("Color detectado ✔️");
+        alert("Color tomado ✔️");
     }
 });
 
-// Detectar color dominante
+// --- Detectar color dominante ---
 function getDominantColor(img){
-    const canvas = document.createElement("canvas");
-    canvas.width = 1; canvas.height = 1;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, 0, 0, 1, 1);
-    const pixel = ctx.getImageData(0,0,1,1).data;
-    return `rgb(${pixel[0]},${pixel[1]},${pixel[2]})`;
+    let c = document.createElement("canvas");
+    c.width=1; c.height=1;
+    let ctx = c.getContext("2d");
+    ctx.drawImage(img,0,0,1,1);
+    let d = ctx.getImageData(0,0,1,1).data;
+    return `rgb(${d[0]},${d[1]},${d[2]})`;
 }
 
-// Cámara en vivo
-function startCamera(){
-    const video = document.getElementById("cameraPreview");
-    video.style.display = "block";
+// --- MediaPipe Hands ---
+const video = document.getElementById("camera");
+const canvas = document.getElementById("output");
+const ctx = canvas.getContext("2d");
 
-    navigator.mediaDevices.getUserMedia({ video:true })
-    .then(stream=>{
-        video.srcObject = stream;
+const hands = new Hands({
+    locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+});
+hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.6,
+    minTrackingConfidence: 0.6
+});
+hands.onResults(onResults);
 
-        setInterval(()=> applyColorFilter(video), 100);
+async function startCam(){
+    const stream = await navigator.mediaDevices.getUserMedia({video:true});
+    video.srcObject = stream;
+
+    const camera = new Camera(video, {
+        onFrame: async () => {
+            await hands.send({image: video});
+        },
+        width: 1280,
+        height: 720
     });
+    camera.start();
 }
+startCam();
 
-// Pintar uña (filtro completo por ahora)
-function applyColorFilter(video){
-    const canvas = document.getElementById("finalPreview");
-    const ctx = canvas.getContext("2d");
-
-    canvas.style.display = "block";
+// --- FUNCIÓN PRINCIPAL: pintar uñas ---
+function onResults(results){
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
+    if(!results.multiHandLandmarks[0]) return;
+
+    const hand = results.multiHandLandmarks[0];
+
+    // Puntas de los dedos (nails zone)
+    const nails = [
+        hand[4],   // pulgar
+        hand[8],   // índice
+        hand[12],  // mayor
+        hand[16],  // anular
+        hand[20]   // meñique
+    ];
+
+    // Dibujar uñas como círculos detectados (versión PRO simplificada)
+    nails.forEach(n=>{
+        paintNail(n.x, n.y);
+    });
+}
+
+// --- pintar SOLO la uña ---
+function paintNail(nx, ny){
+    const x = nx * canvas.width;
+    const y = ny * canvas.height;
+
+    const radius = 35; // tamaño de uña aprox
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI*2);
+    ctx.clip();
+
+    // multiplicar color para que respete textura
+    ctx.globalAlpha = 0.55;
     ctx.fillStyle = selectedColor;
-    ctx.globalAlpha = 0.25;
-    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillRect(x-radius, y-radius, radius*2, radius*2);
+
+    ctx.restore();
     ctx.globalAlpha = 1.0;
 }
 </script>
