@@ -3,35 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>UñApp PRO</title>
+<title>UñApp PRO Realista</title>
 
 <!-- MediaPipe -->
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 
 <style>
 body {
     background:#111;
-    color:#fff;
-    font-family: Arial, sans-serif;
+    color:white;
     text-align:center;
-    margin:0;
+    font-family:Arial;
     padding:15px;
-}
-h1 {
-    font-size:26px;
-    margin-top:10px;
 }
 button {
     width:90%;
     padding:15px;
-    margin:10px 0;
     background:#FF00B3;
     border:none;
     border-radius:10px;
     font-size:18px;
-    color:#fff;
+    color:white;
+    margin-top:10px;
     font-weight:bold;
 }
 video, canvas {
@@ -43,17 +38,17 @@ video, canvas {
 </head>
 <body>
 
-<h1>💅 UñApp PRO</h1>
-<p>Poné tu mano y mirá tus uñas pintadas en vivo</p>
+<h1>💅 UñApp PRO Realista</h1>
+<p>Color real del esmalte aplicado SOLO en las uñas.</p>
 
-<button onclick="pickColor()">📸 Elegir foto del esmalte</button>
+<button onclick="pickColor()">📸 Sacar foto del esmalte</button>
 <input id="colorInput" type="file" accept="image/*" style="display:none">
 
-<video id="camera" autoplay playsinline></video>
-<canvas id="output"></canvas>
+<video id="video" autoplay playsinline></video>
+<canvas id="canvas"></canvas>
 
 <script>
-let selectedColor = "rgb(255,0,255)"; // default rosa
+let selectedColor = "rgb(255,0,255)";
 
 function pickColor(){
     document.getElementById("colorInput").click();
@@ -65,11 +60,10 @@ document.getElementById("colorInput").addEventListener("change", e=>{
     img.src = URL.createObjectURL(file);
     img.onload = ()=>{
         selectedColor = getDominantColor(img);
-        alert("Color tomado ✔️");
+        alert("Color detectado ✔️");
     }
 });
 
-// --- Detectar color dominante ---
 function getDominantColor(img){
     let c = document.createElement("canvas");
     c.width=1; c.height=1;
@@ -79,82 +73,91 @@ function getDominantColor(img){
     return `rgb(${d[0]},${d[1]},${d[2]})`;
 }
 
-// --- MediaPipe Hands ---
-const video = document.getElementById("camera");
-const canvas = document.getElementById("output");
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
-
-const hands = new Hands({
-    locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-});
-hands.setOptions({
-    maxNumHands: 1,
-    modelComplexity: 1,
-    minDetectionConfidence: 0.6,
-    minTrackingConfidence: 0.6
-});
-hands.onResults(onResults);
 
 async function startCam(){
     const stream = await navigator.mediaDevices.getUserMedia({video:true});
     video.srcObject = stream;
-
-    const camera = new Camera(video, {
-        onFrame: async () => {
-            await hands.send({image: video});
-        },
-        width: 1280,
-        height: 720
-    });
-    camera.start();
 }
 startCam();
 
-// --- FUNCIÓN PRINCIPAL: pintar uñas ---
-function onResults(results){
+// HANDS
+const hands = new Hands({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+});
+hands.setOptions({
+  maxNumHands: 1,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.6,
+  minTrackingConfidence: 0.6
+});
+
+// SEGMENTACIÓN (mano completa)
+const segment = new SelfieSegmentation({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`
+});
+segment.setOptions({modelSelection:1});
+
+// Combinar ambos resultados
+hands.onResults(results => draw(results));
+segment.onResults(seg => (window.segMask = seg.segmentationMask));
+
+const cam = new Camera(video, {
+  onFrame: async () => {
+    await segment.send({image: video});
+    await hands.send({image: video});
+  },
+  width: 1280, height: 720
+});
+cam.start();
+
+function draw(results){
+    if(!window.segMask) return;
+
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // Mostrar la cámara
+    ctx.drawImage(video,0,0,canvas.width,canvas.height);
 
     if(!results.multiHandLandmarks[0]) return;
 
     const hand = results.multiHandLandmarks[0];
 
-    // Puntas de los dedos (nails zone)
-    const nails = [
-        hand[4],   // pulgar
-        hand[8],   // índice
-        hand[12],  // mayor
-        hand[16],  // anular
-        hand[20]   // meñique
+    // Uñas reales: usar 4 puntos por dedo
+    const nailGroups = [
+        [hand[4], hand[3], hand[2], hand[1]],   // pulgar
+        [hand[8], hand[7], hand[6], hand[5]],   // índice
+        [hand[12], hand[11], hand[10], hand[9]], // medio
+        [hand[16], hand[15], hand[14], hand[13]],// anular
+        [hand[20], hand[19], hand[18], hand[17]] // meñique
     ];
 
-    // Dibujar uñas como círculos detectados (versión PRO simplificada)
-    nails.forEach(n=>{
-        paintNail(n.x, n.y);
-    });
+    nailGroups.forEach(poly => paintNailPolygon(poly));
 }
 
-// --- pintar SOLO la uña ---
-function paintNail(nx, ny){
-    const x = nx * canvas.width;
-    const y = ny * canvas.height;
-
-    const radius = 35; // tamaño de uña aprox
-
+function paintNailPolygon(poly){
     ctx.save();
     ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI*2);
+
+    poly.forEach((p,i)=>{
+        let x = p.x * canvas.width;
+        let y = p.y * canvas.height;
+        if(i===0) ctx.moveTo(x,y);
+        else ctx.lineTo(x,y);
+    });
+    ctx.closePath();
     ctx.clip();
 
-    // multiplicar color para que respete textura
+    // Aplicar el color real del esmalte con textura natural
     ctx.globalAlpha = 0.55;
     ctx.fillStyle = selectedColor;
-    ctx.fillRect(x-radius, y-radius, radius*2, radius*2);
+    ctx.fillRect(0,0,canvas.width,canvas.height);
 
     ctx.restore();
-    ctx.globalAlpha = 1.0;
+    ctx.globalAlpha = 1;
 }
 </script>
 
