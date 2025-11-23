@@ -2,105 +2,171 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<title>UñApp Studio</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pinta Tus Uñas</title>
 
 <style>
-body {
+body{
   background:#111; color:#fff;
   font-family:Arial; text-align:center;
-  padding:15px;
+  padding:20px;
 }
-button {
+#canvas{
+  width:100%; max-width:420px;
+  border-radius:12px;
+  margin-top:15px;
+}
+button{
   width:90%; padding:15px;
-  margin-top:10px; font-size:18px;
-  background:#ff00b3; color:white;
-  border:none; border-radius:10px;
+  margin:10px auto;
+  background:#ff00b3;
+  font-size:18px;
+  border:none; border-radius:12px;
+  color:#fff;
 }
-#canvas { margin-top:15px; width:100%; border-radius:10px; }
+.tools{
+  display:flex;
+  justify-content:center;
+  gap:10px;
+  margin-top:10px;
+}
+.tool-btn{
+  padding:12px 14px;
+  background:#333;
+  border:none;
+  border-radius:8px;
+  color:white;
+  font-size:14px;
+}
 </style>
 </head>
 
 <body>
 
-<h2>💅 Pinta Tus Uñas - Funciona de Verdad</h2>
+<h2>💅 UñApp Studio</h2>
+<p>Editá tus uñas como una PRO</p>
 
-<button onclick="pickEsmalte()">📸 Foto del esmalte</button>
-<input id="esmalteInput" type="file" accept="image/*" style="display:none">
+<button onclick="loadHand()">📸 Subir foto de la mano</button>
+<input id="handInput" type="file" accept="image/*" style="display:none">
 
-<button onclick="pickMano()">✋ Foto de tu mano</button>
-<input id="manoInput" type="file" accept="image/*" style="display:none">
-
-<p>Tocá una uña para pintarla</p>
+<div class="tools">
+  <button class="tool-btn" onclick="mode='color'">🎨 Color</button>
+  <button class="tool-btn" onclick="mode='gel'">💎 Gel</button>
+  <button class="tool-btn" onclick="mode='glitter'">✨ Glitter</button>
+  <button class="tool-btn" onclick="mode='neon'">🌈 Neon</button>
+  <button class="tool-btn" onclick="undo()">↩️ Deshacer</button>
+</div>
 
 <canvas id="canvas"></canvas>
 
+<button onclick="save()">💾 Guardar foto</button>
+
 <script>
-let color = "rgb(255,0,150)";
-let imgMano = null;
+let canvas=document.getElementById("canvas");
+let ctx=canvas.getContext("2d");
+let img=null;
+let mode="color";
+let history=[];
 
-function pickEsmalte(){
-  document.getElementById("esmalteInput").click();
+function loadHand(){
+  document.getElementById("handInput").click();
 }
 
-document.getElementById("esmalteInput").addEventListener("change", e=>{
-  let file = e.target.files[0];
-  let img = new Image();
-  img.src = URL.createObjectURL(file);
-  img.onload = ()=>{
-    let c = document.createElement("canvas");
-    c.width=1; c.height=1;
-    let ctx = c.getContext("2d");
-    ctx.drawImage(img,0,0,1,1);
-    let d = ctx.getImageData(0,0,1,1).data;
-    color = `rgb(${d[0]},${d[1]},${d[2]})`;
-    alert("Color detectado ✔️");
-  }
+document.getElementById("handInput").addEventListener("change", e=>{
+  let file=e.target.files[0];
+  img=new Image();
+  img.src=URL.createObjectURL(file);
+  img.onload=()=>{
+    canvas.width=img.width;
+    canvas.height=img.height;
+    ctx.drawImage(img,0,0);
+  };
 });
 
-function pickMano(){
-  document.getElementById("manoInput").click();
+// Registrar historial para deshacer
+function pushHistory(){
+  history.push(canvas.toDataURL());
+  if(history.length>20) history.shift();
 }
 
-document.getElementById("manoInput").addEventListener("change", e=>{
-  let file = e.target.files[0];
-  imgMano = new Image();
-  imgMano.src = URL.createObjectURL(file);
-  imgMano.onload = ()=> drawMano();
-});
-
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-
-function drawMano(){
-  canvas.width = imgMano.width;
-  canvas.height = imgMano.height;
-  ctx.drawImage(imgMano,0,0);
-}
-
-// cuando toca una uña → pinta
 canvas.addEventListener("click", e=>{
-  if(!imgMano) return;
+  if(!img) return;
 
-  let rect = canvas.getBoundingClientRect();
-  let x = e.clientX - rect.left;
-  let y = e.clientY - rect.top;
+  pushHistory();
 
-  // circulo suave de pintado
-  const r = 45;
+  let rect=canvas.getBoundingClientRect();
+  let x=e.clientX-rect.left;
+  let y=e.clientY-rect.top;
+
+  paintNail(x,y);
+});
+
+function paintNail(x,y){
+  let r=45;
 
   ctx.save();
   ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.arc(x,y,r,0,Math.PI*2);
   ctx.clip();
 
-  ctx.globalAlpha = 0.65;
-  ctx.fillStyle = color;
-  ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  if(mode==="color"){
+    ctx.globalAlpha=0.7;
+    ctx.fillStyle="rgb(255,0,150)";
+    ctx.fillRect(x-r,y-r,r*2,r*2);
+  }
+  if(mode==="gel"){
+    ctx.globalAlpha=0.6;
+    ctx.fillStyle="rgb(255,0,150)";
+    ctx.fillRect(x-r,y-r,r*2,r*2);
+
+    ctx.globalAlpha=0.3;
+    let grd=ctx.createRadialGradient(x-10,y-10,5,x,y,r);
+    grd.addColorStop(0,"white");
+    grd.addColorStop(1,"rgba(255,255,255,0)");
+    ctx.fillStyle=grd;
+    ctx.fillRect(x-r,y-r,r*2,r*2);
+  }
+  if(mode==="glitter"){
+    ctx.globalAlpha=0.7;
+    ctx.fillStyle="rgb(255,0,150)";
+    ctx.fillRect(x-r,y-r,r*2,r*2);
+
+    ctx.globalAlpha=1;
+    for(let i=0;i<25;i++){
+      ctx.fillStyle="white";
+      ctx.globalAlpha=Math.random();
+      ctx.fillRect(x-r+Math.random()*r*2,y-r+Math.random()*r*2,2,2);
+    }
+  }
+  if(mode==="neon"){
+    ctx.globalAlpha=0.6;
+    ctx.fillStyle="rgb(255,0,150)";
+    ctx.fillRect(x-r,y-r,r*2,r*2);
+
+    ctx.globalAlpha=0.7;
+    ctx.strokeStyle="rgb(255,0,255)";
+    ctx.lineWidth=6;
+    ctx.strokeRect(x-r,y-r,r*2,r*2);
+  }
 
   ctx.restore();
-  ctx.globalAlpha = 1;
-});
+  ctx.globalAlpha=1;
+}
+
+function undo(){
+  if(history.length===0) return;
+  let last=history.pop();
+  let img2=new Image();
+  img2.src=last;
+  img2.onload=()=>ctx.drawImage(img2,0,0);
+}
+
+function save(){
+  let link=document.createElement("a");
+  link.download="unapp_editada.png";
+  link.href=canvas.toDataURL();
+  link.click();
+}
 </script>
 
 </body>
